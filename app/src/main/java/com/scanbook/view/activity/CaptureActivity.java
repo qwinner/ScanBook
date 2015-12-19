@@ -1,26 +1,41 @@
 package com.scanbook.view.activity;
 
 import java.io.IOException;
+import java.util.Hashtable;
 import java.util.Vector;
 import com.google.zxing.BarcodeFormat;
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.DecodeHintType;
+import com.google.zxing.MultiFormatReader;
+import com.google.zxing.NotFoundException;
+import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.Result;
+import com.google.zxing.common.HybridBinarizer;
 import com.zxing.camera.CameraManager;
 import com.zxing.decoding.CaptureActivityHandler;
 import com.zxing.decoding.InactivityTimer;
 import com.zxing.view.ViewfinderView;
 import com.scanbook.R;
 import android.app.Activity;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.res.AssetFileDescriptor;
+import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Vibrator;
+import android.provider.MediaStore;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.SurfaceHolder;
 import android.view.View;
@@ -30,6 +45,7 @@ import android.view.View.OnClickListener;
 import android.view.SurfaceView;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * <a href="http://fangjie.sinaapp.com">http://fangjie.sinaapp.com</a>
@@ -55,6 +71,7 @@ public class CaptureActivity extends Activity implements Callback {
 	private static final float BEEP_VOLUME = 0.10f;
 	private boolean vibrate;
 
+    private String photo_path;
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -156,8 +173,8 @@ public class CaptureActivity extends Activity implements Callback {
 	
 	public void handleDecode(Result obj, Bitmap barcode) {
 		inactivityTimer.onActivity();
-		Log.i("OUTPUT",obj.getBarcodeFormat().toString() + ":"
-				+ obj.getText());
+		Log.i("OUTPUT", obj.getBarcodeFormat().toString() + ":"
+                + obj.getText());
 		txtResult.setText(obj.getBarcodeFormat().toString() + ":"
 				+ obj.getText());
 	}
@@ -206,6 +223,8 @@ public class CaptureActivity extends Activity implements Callback {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.activity_capture, menu);
         getActionBar().setHomeButtonEnabled(true);
         return super.onCreateOptionsMenu(menu);
     }
@@ -217,7 +236,97 @@ public class CaptureActivity extends Activity implements Callback {
             case android.R.id.home:
                 finish();
                 break;
+            case R.id.actionbar_getpic:
+                //打开手机中的相册
+                Intent innerIntent = new Intent(Intent.ACTION_PICK);
+                innerIntent.setType("image/*");
+                Intent wrapperIntent = Intent.createChooser(innerIntent, "选择二维码图片");
+                this.startActivityForResult(wrapperIntent, 300);
+                break;
         }
         return true;
     }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if ((resultCode == RESULT_OK) && (data != null)) {
+            switch (requestCode) {
+                case 300:
+                    // 获取选中图片的路径
+                    ContentResolver resolver = getContentResolver();
+                    Uri originalUri = data.getData();
+                    String[] proj = {MediaStore.Images.Media.DATA};
+                    Cursor cursor = managedQuery(originalUri,proj,null,null,null);
+                    int colum_index= cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                    if(cursor.moveToFirst())
+                    {
+                        photo_path= cursor.getString(colum_index);
+                    }
+
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Result result = scanningImage(photo_path);
+                            // String result = decode(photo_path);
+                            if (result == null) {
+                                Looper.prepare();
+                                Toast.makeText(getApplicationContext(), "图片格式有误", 0)
+                                        .show();
+                                Looper.loop();
+                            } else {
+                                Log.i("123result", result.toString());
+                                // Log.i("123result", result.getText());
+                                // 数据返回
+                                //String recode = recode(result.toString());
+                                Intent data = new Intent();
+                                data.putExtra("result", result.getText());
+                                setResult(300, data);
+                                finish();
+                            }
+                        }
+                    }).start();
+                    break;
+
+            }
+
+        }
+
+    }
+
+    //二维码
+    protected Result scanningImage(String path) {
+        if (TextUtils.isEmpty(path)) {
+            return null;
+        }
+        // DecodeHintType 和EncodeHintType
+        Hashtable<DecodeHintType, String> hints = new Hashtable<DecodeHintType, String>();
+        hints.put(DecodeHintType.CHARACTER_SET, "utf-8");
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        Bitmap scanBitmap = BitmapFactory.decodeFile(path, options);
+        options.inJustDecodeBounds = false;
+        int sampleSize = (int) (options.outHeight / (float) 200);
+        if (sampleSize <= 0)
+            sampleSize = 1;
+        options.inSampleSize = sampleSize;
+        scanBitmap = BitmapFactory.decodeFile(path, options);
+        int[] intArray = new int[scanBitmap.getWidth() * scanBitmap.getHeight()];
+        //copy pixel data from the Bitmap into the 'intArray' array
+        scanBitmap.getPixels(intArray, 0, scanBitmap.getWidth(), 0, 0, scanBitmap.getWidth(), scanBitmap.getHeight());
+        RGBLuminanceSource source = new RGBLuminanceSource(scanBitmap.getWidth(), scanBitmap.getHeight(), intArray);
+        BinaryBitmap bitmap1 = new BinaryBitmap(new HybridBinarizer(source));
+        try {
+            return new MultiFormatReader().decode(bitmap1, hints);
+        } catch (NotFoundException e) {
+            e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+
+
+
 }

@@ -6,6 +6,7 @@
     <string name="score">评分</string>
     <string name="feedback">意见反馈</string>
     <string name="capture_tip">请将条码置于取景框内扫描</string>
+    <string name="get_pic_from_cdcard">从相册选取二维码</string>
     <string name="title_activity_search">搜索图书</string>
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>

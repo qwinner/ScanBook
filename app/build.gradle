@@ -6,7 +6,7 @@ android {
 
     defaultConfig {
         applicationId "com.scanbook"
-        minSdkVersion 8
+        minSdkVersion 19
         targetSdkVersion 21
         versionCode 200
         versionName "2.00"
@@ -30,4 +30,5 @@ dependencies {
     compile files('libs/umeng-analytics-v5.4.1.jar')
     compile files('libs/umeng-update-v2.6.0.jar')
     compile files('libs/NEWIAD#mp.dt.jar')
+    compile 'com.google.android.gms:play-services-appindexing:8.1.0'
 }
